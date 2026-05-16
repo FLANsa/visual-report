@@ -63,31 +63,73 @@ function plotLayout(title, extra = {}) {
   };
 }
 
-function loadChannelsReport(workbook) {
-  const sheet = workbook.Sheets["Channels Report"];
-  if (!sheet) throw new Error("ورقة 'Channels Report' غير موجودة");
+function cellValue(sheet, row, col) {
+  const cell = sheet[XLSX.utils.encode_cell({ r: row, c: col })];
+  if (!cell) return null;
+  return cell.v;
+}
 
-  const rows = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    defval: null,
-    raw: false,
-  });
+function normalizeKey(key) {
+  const trimmed = String(key || "").trim();
+  const compact = trimmed.replace(/\s+/g, "").toLowerCase();
+  const aliases = {
+    averageresponse: "Average Response",
+    servicelevel: "Service Level",
+  };
+  return aliases[compact] || trimmed;
+}
 
-  const headerRow = rows[2] || [];
-  const dataRows = rows.slice(3);
+function parseServiceLevel(value) {
+  if (value == null || value === "") return 0;
+  if (typeof value === "number") return value > 1 ? value / 100 : value;
+  const text = String(value).trim().replace("%", "");
+  const n = Number(text);
+  if (!Number.isFinite(n)) return 0;
+  return n > 1 ? n / 100 : n;
+}
 
-  const records = dataRows
-    .map((row) => {
-      const slice = row.slice(COL_START, COL_END + 1);
-      const obj = {};
-      headerRow.slice(COL_START, COL_END + 1).forEach((key, idx) => {
-        const name = key == null ? "" : String(key).trim();
-        obj[name || `col_${idx}`] = slice[idx];
-      });
-      return obj;
-    })
-    .filter((row) => row.Channel != null && String(row.Channel).trim() !== "");
+function readChannelsReportSheet(sheet) {
+  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+  const headerRow = 2;
+  const headers = [];
+  for (let col = COL_START; col <= COL_END; col++) {
+    const raw = cellValue(sheet, headerRow, col);
+    headers.push(raw == null ? `col_${col - COL_START}` : normalizeKey(raw));
+  }
 
+  const records = [];
+  for (let row = headerRow + 1; row <= range.e.r; row++) {
+    const obj = {};
+    headers.forEach((name, idx) => {
+      obj[name] = cellValue(sheet, row, COL_START + idx);
+    });
+    if (obj.Channel == null || String(obj.Channel).trim() === "") continue;
+    records.push(obj);
+  }
+  return records;
+}
+
+function readDataSheet(sheet) {
+  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+  const headers = [];
+  for (let col = 0; col <= range.e.c; col++) {
+    const raw = cellValue(sheet, 0, col);
+    headers.push(raw == null ? `col_${col}` : normalizeKey(raw));
+  }
+
+  const records = [];
+  for (let row = 1; row <= range.e.r; row++) {
+    const obj = {};
+    headers.forEach((name, idx) => {
+      obj[name] = cellValue(sheet, row, idx);
+    });
+    if (obj.Channel == null || String(obj.Channel).trim() === "") continue;
+    records.push(obj);
+  }
+  return records;
+}
+
+function finalizeRecords(records) {
   let lastDate = null;
   for (const row of records) {
     if (row.Date != null && row.Date !== "") lastDate = row.Date;
@@ -95,7 +137,9 @@ function loadChannelsReport(workbook) {
     row.Date = excelDateToString(row.Date);
     row.Channel = String(row.Channel).trim();
 
-    const extraKey = Object.keys(row).find((k) => k.toLowerCase().startsWith("unnamed"));
+    const extraKey = Object.keys(row).find((k) =>
+      /^col_\d+$/i.test(k) || k.toLowerCase().startsWith("unnamed")
+    );
     if (extraKey) {
       row.Pending = toNumber(row.Pending) + toNumber(row[extraKey]);
       delete row[extraKey];
@@ -105,14 +149,36 @@ function loadChannelsReport(workbook) {
       row[col] = Math.round(toNumber(row[col]));
     });
 
-    row["Service Level"] = toNumber(row["Service Level"]);
+    if (row.ResponseSeconds != null && row["Average Response"] == null) {
+      row["Average Response"] = row.ResponseSeconds;
+    }
+    if (row.AverageResponse != null && row["Average Response"] == null) {
+      row["Average Response"] = row.AverageResponse;
+    }
+
+    row["Service Level"] = parseServiceLevel(
+      row["Service Level"] ?? row.ServiceLevel
+    );
     row.ResponseSeconds = secondsFromTime(row["Average Response"]);
     row.AverageResponseText = formatSeconds(row.ResponseSeconds);
-    row.ClosureRate =
-      row.Incoming > 0 ? row.Closed / row.Incoming : 0;
+    row.ClosureRate = row.Incoming > 0 ? row.Closed / row.Incoming : 0;
   }
-
   return records;
+}
+
+function loadChannelsReport(workbook) {
+  if (workbook.Sheets["Channels Report"]) {
+    return finalizeRecords(readChannelsReportSheet(workbook.Sheets["Channels Report"]));
+  }
+  if (workbook.Sheets.Data) {
+    return finalizeRecords(readDataSheet(workbook.Sheets.Data));
+  }
+  const fallback = workbook.SheetNames[0];
+  if (!fallback) throw new Error("الملف لا يحتوي على أوراق عمل");
+  throw new Error(
+    "لم يُعثر على ورقة 'Channels Report' أو 'Data'. الأوراق المتاحة: " +
+      workbook.SheetNames.join(", ")
+  );
 }
 
 function renderChart(id, figure) {
