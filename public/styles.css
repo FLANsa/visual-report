@@ -18,8 +18,8 @@ html,
 body {
   margin: 0;
   padding: 0;
-  direction: rtl;
-  text-align: right;
+  direction: ltr;
+  text-align: left;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   background: var(--bg);
   color: var(--text);
@@ -82,7 +82,7 @@ h3 {
   font-size: 2rem;
   font-weight: 700;
   direction: ltr;
-  text-align: right;
+  text-align: left;
 }
 
 .grid-2 {
@@ -112,7 +112,7 @@ h3 {
 }
 
 .error-card {
-  border-right: 4px solid var(--danger);
+  border-left: 4px solid var(--danger);
   color: #8b1c12;
 }
 

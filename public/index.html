@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -12,31 +12,31 @@
     <main class="container">
       <h1>📊 Visual Report</h1>
       <p class="subtitle">
-        ارفع ملف Excel الخاص بتقرير القنوات وستظهر لك لوحة تحكم تفاعلية بأهم
-        المؤشرات والرسوم البيانية لأداء القنوات.
+        Upload your channels Excel report to view an interactive dashboard with
+        key metrics and charts for channel performance.
       </p>
 
       <section class="upload-card">
         <label class="upload-label" for="excel-input">
-          📁 ارفع ملف Excel
+          📁 Upload Excel file
           <input id="excel-input" type="file" accept=".xlsx,.xls" />
         </label>
         <p id="file-name" class="file-name"></p>
       </section>
 
       <section id="welcome" class="info-card">
-        <p>👋 مرحباً! ارفع ملف Excel من الأعلى لعرض لوحة التحكم.</p>
+        <p>👋 Welcome! Upload an Excel file above to view the dashboard.</p>
         <details>
-          <summary>📋 ما هو هيكل الملف المطلوب؟</summary>
+          <summary>📋 Required file structure</summary>
           <ul>
-            <li><strong>اسم الورقة:</strong> Channels Report</li>
+            <li><strong>Sheet name:</strong> Channels Report (or Data)</li>
             <li>
-              <strong>الأعمدة:</strong> Date, Channel, Incoming, Closed, Pending,
+              <strong>Columns:</strong> Date, Channel, Incoming, Closed, Pending,
               Backlog, Average Response, Service Level
             </li>
             <li>
-              <strong>يدعم:</strong> الخلايا المدموجة في عمود التاريخ، وقيم Pending
-              المنقسمة على عمودين
+              <strong>Supports:</strong> merged date cells and Pending values split
+              across two columns
             </li>
           </ul>
         </details>
@@ -48,11 +48,11 @@
         <h2 id="report-date"></h2>
         <div class="divider"></div>
         <article class="kpi-card">
-          <h3>📦 إجمالي المتراكم</h3>
+          <h3>📦 Total backlog</h3>
           <p id="kpi-backlog" class="kpi-value">0</p>
         </article>
         <div class="divider"></div>
-        <h2>📈 الرسوم البيانية</h2>
+        <h2>📈 Charts</h2>
         <div class="grid-2">
           <article class="chart-card">
             <div id="chart-incoming" class="chart"></div>

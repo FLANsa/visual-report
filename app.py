@@ -1,4 +1,4 @@
-"""Visual Report — لوحة تحكم تقرير القنوات."""
+"""Visual Report — channels dashboard."""
 
 from __future__ import annotations
 
@@ -29,13 +29,13 @@ st.markdown(
     """
     <style>
       html, body, [class*="css"], .main, .block-container {
-        direction: rtl;
-        text-align: right;
+        direction: ltr;
+        text-align: left;
         font-family: 'Segoe UI', 'Tahoma', 'Geneva', 'Verdana', sans-serif;
       }
-      [data-testid="stMetric"] { text-align: right; }
-      [data-testid="stMetricLabel"] { justify-content: flex-end; }
-      [data-testid="stMetricValue"] { direction: ltr; text-align: right; }
+      [data-testid="stMetric"] { text-align: left; }
+      [data-testid="stMetricLabel"] { justify-content: flex-start; }
+      [data-testid="stMetricValue"] { direction: ltr; text-align: left; }
       .stPlotlyChart { direction: ltr; }
       h1, h2, h3, h4 { font-weight: 700; }
       .stDataFrame { direction: ltr; }
@@ -47,7 +47,7 @@ st.markdown(
 
 
 def _seconds_from_time(value) -> float:
-    """تحويل الوقت لثواني للحسابات."""
+    """Convert a time value to seconds."""
     if pd.isna(value):
         return 0.0
     if isinstance(value, dt.time):
@@ -68,7 +68,7 @@ def _seconds_from_time(value) -> float:
 
 
 def _format_seconds(total_seconds: float) -> str:
-    """عرض الثواني بصيغة HH:MM:SS."""
+    """Format seconds as HH:MM:SS."""
     if pd.isna(total_seconds):
         return "00:00:00"
     total_seconds = int(round(total_seconds))
@@ -77,21 +77,39 @@ def _format_seconds(total_seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
+def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    rename = {
+        "AverageResponse": "Average Response",
+        "ServiceLevel": "Service Level",
+    }
+    df = df.rename(columns={c: rename.get(str(c).strip(), str(c).strip()) for c in df.columns})
+    return df
+
+
 @st.cache_data(show_spinner=False)
 def load_channels_report(file_bytes: bytes, source_name: str) -> pd.DataFrame:
-    """قراءة ومعالجة ملف تقرير القنوات."""
-    df = pd.read_excel(
-        BytesIO(file_bytes),
-        sheet_name="Channels Report",
-        header=2,
-        usecols="G:O",
-        engine="openpyxl",
-    )
-    df.columns = [str(c).strip() for c in df.columns]
+    """Load and parse a channels report workbook."""
+    buffer = BytesIO(file_bytes)
+    workbook = pd.ExcelFile(buffer, engine="openpyxl")
 
+    if "Channels Report" in workbook.sheet_names:
+        df = pd.read_excel(
+            workbook,
+            sheet_name="Channels Report",
+            header=2,
+            usecols="G:O",
+        )
+    elif "Data" in workbook.sheet_names:
+        df = pd.read_excel(workbook, sheet_name="Data", header=0)
+    else:
+        raise ValueError(
+            "Could not find a 'Channels Report' or 'Data' sheet. "
+            f"Available sheets: {', '.join(workbook.sheet_names)}"
+        )
+
+    df = _normalize_columns(df)
     df["Date"] = df["Date"].ffill()
 
-    # دمج الأعمدة المنقسمة للـ Pending (بسبب الدمج K:L في الإكسل)
     extra_col = next((c for c in df.columns if c.lower().startswith("unnamed")), None)
     if extra_col:
         df["Pending"] = df["Pending"].fillna(0) + df[extra_col].fillna(0)
@@ -103,9 +121,15 @@ def load_channels_report(file_bytes: bytes, source_name: str) -> pd.DataFrame:
     for col in ["Incoming", "Closed", "Pending", "Backlog"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
 
-    df["Service Level"] = pd.to_numeric(df["Service Level"], errors="coerce").fillna(0)
+    service = df["Service Level"] if "Service Level" in df.columns else df.get("ServiceLevel")
+    df["Service Level"] = pd.to_numeric(service, errors="coerce").fillna(0)
+    df.loc[df["Service Level"] > 1, "Service Level"] /= 100
 
-    df["Response Seconds"] = df["Average Response"].apply(_seconds_from_time)
+    if "ResponseSeconds" in df.columns:
+        df["Response Seconds"] = pd.to_numeric(df["ResponseSeconds"], errors="coerce").fillna(0)
+    else:
+        response_col = "Average Response" if "Average Response" in df.columns else "AverageResponse"
+        df["Response Seconds"] = df[response_col].apply(_seconds_from_time)
     df["Average Response Text"] = df["Response Seconds"].apply(_format_seconds)
 
     df["Closure Rate"] = (df["Closed"] / df["Incoming"].where(df["Incoming"] > 0, pd.NA)).fillna(0)
@@ -118,17 +142,17 @@ def load_channels_report(file_bytes: bytes, source_name: str) -> pd.DataFrame:
 def render_header() -> None:
     st.title("📊 Visual Report")
     st.markdown(
-        "ارفع ملف Excel الخاص بتقرير القنوات وستظهر لك لوحة تحكم تفاعلية "
-        "بأهم المؤشرات والرسوم البيانية لأداء القنوات."
+        "Upload your channels Excel report to view an interactive dashboard "
+        "with key metrics and charts for channel performance."
     )
 
 
 def get_data_source() -> tuple[bytes, str] | None:
-    """رجّع (file_bytes, source_name) أو None لو ما رفع شيء."""
+    """Return (file_bytes, source_name) or None if nothing was uploaded."""
     uploaded = st.file_uploader(
-        "📁 ارفع ملف Excel",
+        "📁 Upload Excel file",
         type=["xlsx", "xls"],
-        help="يجب أن يحتوي الملف على ورقة باسم 'Channels Report' بنفس الهيكل.",
+        help="The file should include a 'Channels Report' or 'Data' sheet with the expected structure.",
     )
 
     if uploaded is not None:
@@ -138,14 +162,14 @@ def get_data_source() -> tuple[bytes, str] | None:
 
 def render_welcome() -> None:
     st.info(
-        "👋 مرحباً! ارفع ملف Excel من الأعلى لعرض لوحة التحكم."
+        "👋 Welcome! Upload an Excel file above to view the dashboard."
     )
-    with st.expander("📋 ما هو هيكل الملف المطلوب؟"):
+    with st.expander("📋 Required file structure"):
         st.markdown(
             """
-            - **اسم الورقة:** Channels Report
-            - **الأعمدة:** Date, Channel, Incoming, Closed, Pending, Backlog, Average Response, Service Level
-            - **يدعم:** الخلايا المدموجة في عمود التاريخ، وقيم Pending المنقسمة على عمودين
+            - **Sheet name:** Channels Report (or Data)
+            - **Columns:** Date, Channel, Incoming, Closed, Pending, Backlog, Average Response, Service Level
+            - **Supports:** merged date cells and Pending values split across two columns
             """
         )
 
@@ -154,7 +178,7 @@ def render_kpis(df: pd.DataFrame) -> None:
     total_backlog = int(df["Backlog"].sum())
 
     st.metric(
-        "📦 إجمالي المتراكم",
+        "📦 Total backlog",
         f"{total_backlog:,}",
         delta_color="inverse" if total_backlog > 0 else "normal",
     )
@@ -162,13 +186,13 @@ def render_kpis(df: pd.DataFrame) -> None:
 
 def _plotly_layout(title: str, **extra) -> dict:
     base = dict(
-        title=dict(text=title, x=0.98, xanchor="right", font=dict(size=16)),
+        title=dict(text=title, x=0.02, xanchor="left", font=dict(size=16)),
         font=dict(family="Tahoma, Segoe UI, sans-serif", size=12),
         margin=dict(t=60, b=40, l=20, r=20),
         plot_bgcolor="#ffffff",
         paper_bgcolor="#ffffff",
         showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
     base.update(extra)
     return base
@@ -178,7 +202,7 @@ def chart_incoming_vs_closed(df: pd.DataFrame) -> go.Figure:
     sorted_df = df.sort_values("Incoming", ascending=False)
     fig = go.Figure()
     fig.add_bar(
-        name="الوارد",
+        name="Incoming",
         x=sorted_df["Channel"],
         y=sorted_df["Incoming"],
         marker_color=PRIMARY,
@@ -186,7 +210,7 @@ def chart_incoming_vs_closed(df: pd.DataFrame) -> go.Figure:
         textposition="outside",
     )
     fig.add_bar(
-        name="المُغلق",
+        name="Closed",
         x=sorted_df["Channel"],
         y=sorted_df["Closed"],
         marker_color=SUCCESS,
@@ -194,10 +218,10 @@ def chart_incoming_vs_closed(df: pd.DataFrame) -> go.Figure:
         textposition="outside",
     )
     fig.update_layout(
-        **_plotly_layout("الوارد مقابل المُغلق لكل قناة"),
+        **_plotly_layout("Incoming vs closed by channel"),
         barmode="group",
         xaxis=dict(tickangle=-35),
-        yaxis=dict(title="عدد التذاكر", gridcolor="#eee"),
+        yaxis=dict(title="Ticket count", gridcolor="#eee"),
     )
     return fig
 
@@ -213,18 +237,18 @@ def chart_service_level(df: pd.DataFrame) -> go.Figure:
         marker_color=colors,
         text=[f"{v:.0%}" for v in sorted_df["Service Level"]],
         textposition="outside",
-        name="مستوى الخدمة",
+        name="Service level",
     )
     fig.add_vline(
         x=SLA_THRESHOLD * 100,
         line_dash="dash",
         line_color=NEUTRAL,
-        annotation_text=f"الهدف {SLA_THRESHOLD:.0%}",
+        annotation_text=f"Target {SLA_THRESHOLD:.0%}",
         annotation_position="top",
     )
     fig.update_layout(
-        **_plotly_layout("مستوى الخدمة لكل قناة", showlegend=False),
-        xaxis=dict(title="مستوى الخدمة (٪)", range=[0, 110], gridcolor="#eee"),
+        **_plotly_layout("Service level by channel", showlegend=False),
+        xaxis=dict(title="Service level (%)", range=[0, 110], gridcolor="#eee"),
         yaxis=dict(title=""),
     )
     return fig
@@ -239,12 +263,12 @@ def chart_response_time(df: pd.DataFrame) -> go.Figure:
         marker_color=WARNING,
         text=sorted_df["Average Response Text"],
         textposition="outside",
-        name="متوسط الاستجابة",
+        name="Avg response",
     )
     fig.update_layout(
-        **_plotly_layout("متوسط وقت الاستجابة (دقيقة)", showlegend=False),
+        **_plotly_layout("Average response time (minutes)", showlegend=False),
         xaxis=dict(tickangle=-35),
-        yaxis=dict(title="الدقائق", gridcolor="#eee"),
+        yaxis=dict(title="Minutes", gridcolor="#eee"),
     )
     return fig
 
@@ -253,22 +277,22 @@ def chart_pending_backlog(df: pd.DataFrame) -> go.Figure:
     sorted_df = df.sort_values(["Backlog", "Pending"], ascending=False)
     fig = go.Figure()
     fig.add_bar(
-        name="المُعلّق",
+        name="Pending",
         x=sorted_df["Channel"],
         y=sorted_df["Pending"],
         marker_color=WARNING,
     )
     fig.add_bar(
-        name="المتراكم",
+        name="Backlog",
         x=sorted_df["Channel"],
         y=sorted_df["Backlog"],
         marker_color=DANGER,
     )
     fig.update_layout(
-        **_plotly_layout("المُعلّق والمتراكم لكل قناة"),
+        **_plotly_layout("Pending and backlog by channel"),
         barmode="stack",
         xaxis=dict(tickangle=-35),
-        yaxis=dict(title="عدد التذاكر", gridcolor="#eee"),
+        yaxis=dict(title="Ticket count", gridcolor="#eee"),
     )
     return fig
 
@@ -282,12 +306,12 @@ def chart_volume_pie(df: pd.DataFrame) -> go.Figure:
         hole=0.45,
     )
     fig.update_traces(textposition="inside", textinfo="percent+label")
-    fig.update_layout(**_plotly_layout("توزيع الوارد على القنوات"))
+    fig.update_layout(**_plotly_layout("Incoming volume by channel"))
     return fig
 
 
 def render_charts(df: pd.DataFrame) -> None:
-    st.subheader("📈 الرسوم البيانية")
+    st.subheader("📈 Charts")
     row1_col1, row1_col2 = st.columns(2)
     with row1_col1:
         st.plotly_chart(chart_incoming_vs_closed(df), use_container_width=True)
@@ -307,7 +331,7 @@ def render_dashboard(df: pd.DataFrame) -> None:
     report_date = df["Date"].dropna().iloc[0] if df["Date"].notna().any() else None
     if report_date is not None:
         st.markdown(
-            f"### 📅 تاريخ التقرير: {pd.Timestamp(report_date).strftime('%Y-%m-%d')}"
+            f"### 📅 Report date: {pd.Timestamp(report_date).strftime('%Y-%m-%d')}"
         )
 
     st.divider()
@@ -329,14 +353,14 @@ def main() -> None:
         df = load_channels_report(file_bytes, source_name)
     except Exception as exc:
         st.error(
-            "❌ تعذّر قراءة الملف. تأكد أن الملف يحتوي على ورقة باسم "
-            "'Channels Report' بنفس الهيكل المتوقع."
+            "❌ Could not read the file. Make sure it includes a 'Channels Report' or "
+            "'Data' sheet with the expected structure."
         )
         st.exception(exc)
         return
 
     if df.empty:
-        st.warning("الملف لا يحتوي على بيانات قنوات صالحة.")
+        st.warning("The file does not contain valid channel data.")
         return
 
     render_dashboard(df)

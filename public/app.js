@@ -52,13 +52,13 @@ function excelDateToString(value) {
 
 function plotLayout(title, extra = {}) {
   return {
-    title: { text: title, x: 0.98, xanchor: "right", font: { size: 16 } },
+    title: { text: title, x: 0.02, xanchor: "left", font: { size: 16 } },
     font: { family: "Tahoma, Segoe UI, sans-serif", size: 12 },
     margin: { t: 60, b: 40, l: 20, r: 20 },
     plot_bgcolor: "#ffffff",
     paper_bgcolor: "#ffffff",
     showlegend: true,
-    legend: { orientation: "h", yanchor: "bottom", y: 1.02, xanchor: "right", x: 1 },
+    legend: { orientation: "h", yanchor: "bottom", y: 1.02, xanchor: "left", x: 0 },
     ...extra,
   };
 }
@@ -174,9 +174,9 @@ function loadChannelsReport(workbook) {
     return finalizeRecords(readDataSheet(workbook.Sheets.Data));
   }
   const fallback = workbook.SheetNames[0];
-  if (!fallback) throw new Error("الملف لا يحتوي على أوراق عمل");
+  if (!fallback) throw new Error("The workbook has no sheets.");
   throw new Error(
-    "لم يُعثر على ورقة 'Channels Report' أو 'Data'. الأوراق المتاحة: " +
+    "Could not find a 'Channels Report' or 'Data' sheet. Available sheets: " +
       workbook.SheetNames.join(", ")
   );
 }
@@ -191,7 +191,7 @@ function chartIncomingVsClosed(df) {
     data: [
       {
         type: "bar",
-        name: "الوارد",
+        name: "Incoming",
         x: sorted.map((r) => r.Channel),
         y: sorted.map((r) => r.Incoming),
         marker: { color: PRIMARY },
@@ -200,7 +200,7 @@ function chartIncomingVsClosed(df) {
       },
       {
         type: "bar",
-        name: "المُغلق",
+        name: "Closed",
         x: sorted.map((r) => r.Channel),
         y: sorted.map((r) => r.Closed),
         marker: { color: SUCCESS },
@@ -208,10 +208,10 @@ function chartIncomingVsClosed(df) {
         textposition: "outside",
       },
     ],
-    layout: plotLayout("الوارد مقابل المُغلق لكل قناة", {
+    layout: plotLayout("Incoming vs closed by channel", {
       barmode: "group",
       xaxis: { tickangle: -35 },
-      yaxis: { title: "عدد التذاكر", gridcolor: "#eee" },
+      yaxis: { title: "Ticket count", gridcolor: "#eee" },
     }),
   };
 }
@@ -232,10 +232,10 @@ function chartServiceLevel(df) {
         },
         text: sorted.map((r) => `${Math.round(r["Service Level"] * 100)}%`),
         textposition: "outside",
-        name: "مستوى الخدمة",
+        name: "Service level",
       },
     ],
-    layout: plotLayout("مستوى الخدمة لكل قناة", {
+    layout: plotLayout("Service level by channel", {
       showlegend: false,
       shapes: [
         {
@@ -253,12 +253,12 @@ function chartServiceLevel(df) {
           x: SLA_THRESHOLD * 100,
           y: 1,
           yref: "paper",
-          text: `الهدف ${Math.round(SLA_THRESHOLD * 100)}%`,
+          text: `Target ${Math.round(SLA_THRESHOLD * 100)}%`,
           showarrow: false,
           yanchor: "bottom",
         },
       ],
-      xaxis: { title: "مستوى الخدمة (٪)", range: [0, 110], gridcolor: "#eee" },
+      xaxis: { title: "Service level (%)", range: [0, 110], gridcolor: "#eee" },
       yaxis: { title: "" },
     }),
   };
@@ -275,13 +275,13 @@ function chartResponseTime(df) {
         marker: { color: WARNING },
         text: sorted.map((r) => r.AverageResponseText),
         textposition: "outside",
-        name: "متوسط الاستجابة",
+        name: "Avg response",
       },
     ],
-    layout: plotLayout("متوسط وقت الاستجابة (دقيقة)", {
+    layout: plotLayout("Average response time (minutes)", {
       showlegend: false,
       xaxis: { tickangle: -35 },
-      yaxis: { title: "الدقائق", gridcolor: "#eee" },
+      yaxis: { title: "Minutes", gridcolor: "#eee" },
     }),
   };
 }
@@ -295,23 +295,23 @@ function chartPendingBacklog(df) {
     data: [
       {
         type: "bar",
-        name: "المُعلّق",
+        name: "Pending",
         x: sorted.map((r) => r.Channel),
         y: sorted.map((r) => r.Pending),
         marker: { color: WARNING },
       },
       {
         type: "bar",
-        name: "المتراكم",
+        name: "Backlog",
         x: sorted.map((r) => r.Channel),
         y: sorted.map((r) => r.Backlog),
         marker: { color: DANGER },
       },
     ],
-    layout: plotLayout("المُعلّق والمتراكم لكل قناة", {
+    layout: plotLayout("Pending and backlog by channel", {
       barmode: "stack",
       xaxis: { tickangle: -35 },
-      yaxis: { title: "عدد التذاكر", gridcolor: "#eee" },
+      yaxis: { title: "Ticket count", gridcolor: "#eee" },
     }),
   };
 }
@@ -329,7 +329,7 @@ function chartVolumePie(df) {
         textinfo: "percent+label",
       },
     ],
-    layout: plotLayout("توزيع الوارد على القنوات"),
+    layout: plotLayout("Incoming volume by channel"),
   };
 }
 
@@ -351,7 +351,7 @@ function renderDashboard(df) {
 
   const reportDate = df.find((r) => r.Date)?.Date;
   document.getElementById("report-date").textContent = reportDate
-    ? `📅 تاريخ التقرير: ${reportDate}`
+    ? `📅 Report date: ${reportDate}`
   : "";
 
   const totalBacklog = df.reduce((sum, r) => sum + r.Backlog, 0);
@@ -380,14 +380,14 @@ function handleFile(file) {
       const workbook = XLSX.read(data, { type: "array", cellDates: true });
       const df = loadChannelsReport(workbook);
       if (!df.length) {
-        showError("الملف لا يحتوي على بيانات قنوات صالحة.");
+        showError("The file does not contain valid channel data.");
         return;
       }
       renderDashboard(df);
     } catch (err) {
       console.error(err);
       showError(
-        "❌ تعذّر قراءة الملف. تأكد أن الملف يحتوي على ورقة باسم 'Channels Report' بنفس الهيكل المتوقع."
+        "❌ Could not read the file. Make sure it includes a 'Channels Report' or 'Data' sheet with the expected structure."
       );
     }
   };
