@@ -92,13 +92,15 @@ h3 {
 }
 
 .chart-card {
-  min-height: 420px;
+  min-height: 440px;
+  overflow: visible;
 }
 
 .chart {
   width: 100%;
-  min-height: 380px;
+  min-height: 440px;
   direction: ltr;
+  overflow: visible;
 }
 
 .hidden {

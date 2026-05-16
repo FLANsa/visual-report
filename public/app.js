@@ -50,15 +50,41 @@ function excelDateToString(value) {
   return String(value).trim();
 }
 
+function chartHeight(df) {
+  return Math.max(440, df.length * 38 + 120);
+}
+
 function plotLayout(title, extra = {}) {
   return {
     title: { text: title, x: 0.02, xanchor: "left", font: { size: 16 } },
     font: { family: "Tahoma, Segoe UI, sans-serif", size: 12 },
-    margin: { t: 60, b: 40, l: 20, r: 20 },
+    margin: { t: 60, b: 48, l: 8, r: 48 },
     plot_bgcolor: "#ffffff",
     paper_bgcolor: "#ffffff",
     showlegend: true,
     legend: { orientation: "h", yanchor: "bottom", y: 1.02, xanchor: "left", x: 0 },
+    ...extra,
+  };
+}
+
+function channelYAxis(channels) {
+  return {
+    automargin: true,
+    tickfont: { size: 12 },
+    ticklabelposition: "outside",
+    type: "category",
+    categoryorder: "array",
+    categoryarray: channels,
+    title: "",
+  };
+}
+
+function valueXAxis(title, extra = {}) {
+  return {
+    title,
+    gridcolor: "#eee",
+    automargin: true,
+    zeroline: false,
     ...extra,
   };
 }
@@ -182,49 +208,62 @@ function loadChannelsReport(workbook) {
 }
 
 function renderChart(id, figure) {
-  Plotly.newPlot(id, figure.data, figure.layout, { responsive: true, displayModeBar: false });
+  const el = document.getElementById(id);
+  const height = figure.layout?.height || 440;
+  el.style.height = `${height}px`;
+  const card = el.closest(".chart-card");
+  if (card) card.style.minHeight = `${height + 48}px`;
+  Plotly.newPlot(el, figure.data, figure.layout, {
+    responsive: true,
+    displayModeBar: false,
+  });
 }
 
 function chartIncomingVsClosed(df) {
-  const sorted = [...df].sort((a, b) => b.Incoming - a.Incoming);
+  const sorted = [...df].sort((a, b) => a.Incoming - b.Incoming);
+  const channels = sorted.map((r) => r.Channel);
   return {
     data: [
       {
         type: "bar",
+        orientation: "h",
         name: "Incoming",
-        x: sorted.map((r) => r.Channel),
-        y: sorted.map((r) => r.Incoming),
+        y: channels,
+        x: sorted.map((r) => r.Incoming),
         marker: { color: PRIMARY },
-        text: sorted.map((r) => r.Incoming),
-        textposition: "outside",
+        hovertemplate: "<b>%{y}</b><br>Incoming: %{x}<extra></extra>",
       },
       {
         type: "bar",
+        orientation: "h",
         name: "Closed",
-        x: sorted.map((r) => r.Channel),
-        y: sorted.map((r) => r.Closed),
+        y: channels,
+        x: sorted.map((r) => r.Closed),
         marker: { color: SUCCESS },
-        text: sorted.map((r) => r.Closed),
-        textposition: "outside",
+        hovertemplate: "<b>%{y}</b><br>Closed: %{x}<extra></extra>",
       },
     ],
     layout: plotLayout("Incoming vs closed by channel", {
+      height: chartHeight(df),
       barmode: "group",
-      xaxis: { tickangle: -35 },
-      yaxis: { title: "Ticket count", gridcolor: "#eee" },
+      bargap: 0.22,
+      bargroupgap: 0.08,
+      xaxis: valueXAxis("Ticket count"),
+      yaxis: channelYAxis(channels),
     }),
   };
 }
 
 function chartServiceLevel(df) {
   const sorted = [...df].sort((a, b) => a["Service Level"] - b["Service Level"]);
+  const channels = sorted.map((r) => r.Channel);
   return {
     data: [
       {
         type: "bar",
         orientation: "h",
         x: sorted.map((r) => r["Service Level"] * 100),
-        y: sorted.map((r) => r.Channel),
+        y: channels,
         marker: {
           color: sorted.map((r) =>
             r["Service Level"] >= SLA_THRESHOLD ? SUCCESS : DANGER
@@ -232,10 +271,14 @@ function chartServiceLevel(df) {
         },
         text: sorted.map((r) => `${Math.round(r["Service Level"] * 100)}%`),
         textposition: "outside",
+        cliponaxis: false,
+        textfont: { size: 11 },
+        hovertemplate: "<b>%{y}</b><br>SLA: %{x:.0f}%<extra></extra>",
         name: "Service level",
       },
     ],
     layout: plotLayout("Service level by channel", {
+      height: chartHeight(df),
       showlegend: false,
       shapes: [
         {
@@ -258,78 +301,108 @@ function chartServiceLevel(df) {
           yanchor: "bottom",
         },
       ],
-      xaxis: { title: "Service level (%)", range: [0, 110], gridcolor: "#eee" },
-      yaxis: { title: "" },
+      xaxis: valueXAxis("Service level (%)", { range: [0, 115] }),
+      yaxis: channelYAxis(channels),
     }),
   };
 }
 
 function chartResponseTime(df) {
-  const sorted = [...df].sort((a, b) => b.ResponseSeconds - a.ResponseSeconds);
+  const sorted = [...df].sort((a, b) => a.ResponseSeconds - b.ResponseSeconds);
+  const channels = sorted.map((r) => r.Channel);
   return {
     data: [
       {
         type: "bar",
-        x: sorted.map((r) => r.Channel),
-        y: sorted.map((r) => r.ResponseSeconds / 60),
+        orientation: "h",
+        y: channels,
+        x: sorted.map((r) => r.ResponseSeconds / 60),
         marker: { color: WARNING },
         text: sorted.map((r) => r.AverageResponseText),
         textposition: "outside",
+        cliponaxis: false,
+        textfont: { size: 11 },
+        hovertemplate: "<b>%{y}</b><br>Avg: %{text}<extra></extra>",
         name: "Avg response",
       },
     ],
     layout: plotLayout("Average response time (minutes)", {
+      height: chartHeight(df),
       showlegend: false,
-      xaxis: { tickangle: -35 },
-      yaxis: { title: "Minutes", gridcolor: "#eee" },
+      xaxis: valueXAxis("Minutes"),
+      yaxis: channelYAxis(channels),
     }),
   };
 }
 
 function chartPendingBacklog(df) {
   const sorted = [...df].sort((a, b) => {
-    if (b.Backlog !== a.Backlog) return b.Backlog - a.Backlog;
-    return b.Pending - a.Pending;
+    const totalA = a.Backlog + a.Pending;
+    const totalB = b.Backlog + b.Pending;
+    return totalA - totalB;
   });
+  const channels = sorted.map((r) => r.Channel);
   return {
     data: [
       {
         type: "bar",
+        orientation: "h",
         name: "Pending",
-        x: sorted.map((r) => r.Channel),
-        y: sorted.map((r) => r.Pending),
+        y: channels,
+        x: sorted.map((r) => r.Pending),
         marker: { color: WARNING },
+        hovertemplate: "<b>%{y}</b><br>Pending: %{x}<extra></extra>",
       },
       {
         type: "bar",
+        orientation: "h",
         name: "Backlog",
-        x: sorted.map((r) => r.Channel),
-        y: sorted.map((r) => r.Backlog),
+        y: channels,
+        x: sorted.map((r) => r.Backlog),
         marker: { color: DANGER },
+        hovertemplate: "<b>%{y}</b><br>Backlog: %{x}<extra></extra>",
       },
     ],
     layout: plotLayout("Pending and backlog by channel", {
+      height: chartHeight(df),
       barmode: "stack",
-      xaxis: { tickangle: -35 },
-      yaxis: { title: "Ticket count", gridcolor: "#eee" },
+      xaxis: valueXAxis("Ticket count"),
+      yaxis: channelYAxis(channels),
     }),
   };
 }
 
 function chartVolumePie(df) {
   const pie = df.filter((r) => r.Incoming > 0);
+  const legendRows = Math.ceil(pie.length / 2);
   return {
     data: [
       {
         type: "pie",
         labels: pie.map((r) => r.Channel),
         values: pie.map((r) => r.Incoming),
-        hole: 0.45,
+        hole: 0.42,
+        textinfo: "percent",
         textposition: "inside",
-        textinfo: "percent+label",
+        insidetextorientation: "horizontal",
+        textfont: { size: 11 },
+        hovertemplate: "<b>%{label}</b><br>Tickets: %{value:,}<br>%{percent}<extra></extra>",
       },
     ],
-    layout: plotLayout("Incoming volume by channel"),
+    layout: plotLayout("Incoming volume by channel", {
+      height: Math.max(440, legendRows * 22 + 200),
+      showlegend: true,
+      legend: {
+        orientation: "v",
+        x: 1.02,
+        xanchor: "left",
+        y: 0.5,
+        yanchor: "middle",
+        font: { size: 11 },
+        traceorder: "normal",
+      },
+      margin: { t: 60, b: 40, l: 20, r: 160 },
+    }),
   };
 }
 

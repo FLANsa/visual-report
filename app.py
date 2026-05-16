@@ -184,11 +184,33 @@ def render_kpis(df: pd.DataFrame) -> None:
     )
 
 
+def _chart_height(df: pd.DataFrame) -> int:
+    return max(440, len(df) * 38 + 120)
+
+
+def _channel_yaxis(channels: list[str]) -> dict:
+    return dict(
+        automargin=True,
+        tickfont=dict(size=12),
+        ticklabelposition="outside",
+        type="category",
+        categoryorder="array",
+        categoryarray=channels,
+        title="",
+    )
+
+
+def _value_xaxis(title: str, **extra) -> dict:
+    axis = dict(title=title, gridcolor="#eee", automargin=True, zeroline=False)
+    axis.update(extra)
+    return axis
+
+
 def _plotly_layout(title: str, **extra) -> dict:
     base = dict(
         title=dict(text=title, x=0.02, xanchor="left", font=dict(size=16)),
         font=dict(family="Tahoma, Segoe UI, sans-serif", size=12),
-        margin=dict(t=60, b=40, l=20, r=20),
+        margin=dict(t=60, b=48, l=8, r=48),
         plot_bgcolor="#ffffff",
         paper_bgcolor="#ffffff",
         showlegend=True,
@@ -199,44 +221,54 @@ def _plotly_layout(title: str, **extra) -> dict:
 
 
 def chart_incoming_vs_closed(df: pd.DataFrame) -> go.Figure:
-    sorted_df = df.sort_values("Incoming", ascending=False)
+    sorted_df = df.sort_values("Incoming", ascending=True)
+    channels = sorted_df["Channel"].tolist()
     fig = go.Figure()
     fig.add_bar(
         name="Incoming",
-        x=sorted_df["Channel"],
-        y=sorted_df["Incoming"],
+        y=channels,
+        x=sorted_df["Incoming"],
+        orientation="h",
         marker_color=PRIMARY,
-        text=sorted_df["Incoming"],
-        textposition="outside",
+        hovertemplate="<b>%{y}</b><br>Incoming: %{x}<extra></extra>",
     )
     fig.add_bar(
         name="Closed",
-        x=sorted_df["Channel"],
-        y=sorted_df["Closed"],
+        y=channels,
+        x=sorted_df["Closed"],
+        orientation="h",
         marker_color=SUCCESS,
-        text=sorted_df["Closed"],
-        textposition="outside",
+        hovertemplate="<b>%{y}</b><br>Closed: %{x}<extra></extra>",
     )
     fig.update_layout(
-        **_plotly_layout("Incoming vs closed by channel"),
-        barmode="group",
-        xaxis=dict(tickangle=-35),
-        yaxis=dict(title="Ticket count", gridcolor="#eee"),
+        **_plotly_layout(
+            "Incoming vs closed by channel",
+            height=_chart_height(df),
+            barmode="group",
+            bargap=0.22,
+            bargroupgap=0.08,
+        ),
+        xaxis=_value_xaxis("Ticket count"),
+        yaxis=_channel_yaxis(channels),
     )
     return fig
 
 
 def chart_service_level(df: pd.DataFrame) -> go.Figure:
     sorted_df = df.sort_values("Service Level", ascending=True)
+    channels = sorted_df["Channel"].tolist()
     colors = [SUCCESS if v >= SLA_THRESHOLD else DANGER for v in sorted_df["Service Level"]]
     fig = go.Figure()
     fig.add_bar(
         x=sorted_df["Service Level"] * 100,
-        y=sorted_df["Channel"],
+        y=channels,
         orientation="h",
         marker_color=colors,
         text=[f"{v:.0%}" for v in sorted_df["Service Level"]],
         textposition="outside",
+        cliponaxis=False,
+        textfont=dict(size=11),
+        hovertemplate="<b>%{y}</b><br>SLA: %{x:.0f}%<extra></extra>",
         name="Service level",
     )
     fig.add_vline(
@@ -247,52 +279,75 @@ def chart_service_level(df: pd.DataFrame) -> go.Figure:
         annotation_position="top",
     )
     fig.update_layout(
-        **_plotly_layout("Service level by channel", showlegend=False),
-        xaxis=dict(title="Service level (%)", range=[0, 110], gridcolor="#eee"),
-        yaxis=dict(title=""),
+        **_plotly_layout(
+            "Service level by channel",
+            showlegend=False,
+            height=_chart_height(df),
+        ),
+        xaxis=_value_xaxis("Service level (%)", range=[0, 115]),
+        yaxis=_channel_yaxis(channels),
     )
     return fig
 
 
 def chart_response_time(df: pd.DataFrame) -> go.Figure:
-    sorted_df = df.sort_values("Response Seconds", ascending=False)
+    sorted_df = df.sort_values("Response Seconds", ascending=True)
+    channels = sorted_df["Channel"].tolist()
     fig = go.Figure()
     fig.add_bar(
-        x=sorted_df["Channel"],
-        y=sorted_df["Response Seconds"] / 60,
+        y=channels,
+        x=sorted_df["Response Seconds"] / 60,
+        orientation="h",
         marker_color=WARNING,
         text=sorted_df["Average Response Text"],
         textposition="outside",
+        cliponaxis=False,
+        textfont=dict(size=11),
+        hovertemplate="<b>%{y}</b><br>Avg: %{text}<extra></extra>",
         name="Avg response",
     )
     fig.update_layout(
-        **_plotly_layout("Average response time (minutes)", showlegend=False),
-        xaxis=dict(tickangle=-35),
-        yaxis=dict(title="Minutes", gridcolor="#eee"),
+        **_plotly_layout(
+            "Average response time (minutes)",
+            showlegend=False,
+            height=_chart_height(df),
+        ),
+        xaxis=_value_xaxis("Minutes"),
+        yaxis=_channel_yaxis(channels),
     )
     return fig
 
 
 def chart_pending_backlog(df: pd.DataFrame) -> go.Figure:
-    sorted_df = df.sort_values(["Backlog", "Pending"], ascending=False)
+    sorted_df = df.assign(_total=df["Backlog"] + df["Pending"]).sort_values(
+        "_total", ascending=True
+    )
+    channels = sorted_df["Channel"].tolist()
     fig = go.Figure()
     fig.add_bar(
         name="Pending",
-        x=sorted_df["Channel"],
-        y=sorted_df["Pending"],
+        y=channels,
+        x=sorted_df["Pending"],
+        orientation="h",
         marker_color=WARNING,
+        hovertemplate="<b>%{y}</b><br>Pending: %{x}<extra></extra>",
     )
     fig.add_bar(
         name="Backlog",
-        x=sorted_df["Channel"],
-        y=sorted_df["Backlog"],
+        y=channels,
+        x=sorted_df["Backlog"],
+        orientation="h",
         marker_color=DANGER,
+        hovertemplate="<b>%{y}</b><br>Backlog: %{x}<extra></extra>",
     )
     fig.update_layout(
-        **_plotly_layout("Pending and backlog by channel"),
-        barmode="stack",
-        xaxis=dict(tickangle=-35),
-        yaxis=dict(title="Ticket count", gridcolor="#eee"),
+        **_plotly_layout(
+            "Pending and backlog by channel",
+            barmode="stack",
+            height=_chart_height(df),
+        ),
+        xaxis=_value_xaxis("Ticket count"),
+        yaxis=_channel_yaxis(channels),
     )
     return fig
 
@@ -303,10 +358,32 @@ def chart_volume_pie(df: pd.DataFrame) -> go.Figure:
         pie_df,
         values="Incoming",
         names="Channel",
-        hole=0.45,
+        hole=0.42,
     )
-    fig.update_traces(textposition="inside", textinfo="percent+label")
-    fig.update_layout(**_plotly_layout("Incoming volume by channel"))
+    fig.update_traces(
+        textposition="inside",
+        textinfo="percent",
+        insidetextorientation="horizontal",
+        textfont_size=11,
+        hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>%{percent}<extra></extra>",
+    )
+    legend_rows = (len(pie_df) + 1) // 2
+    fig.update_layout(
+        **_plotly_layout(
+            "Incoming volume by channel",
+            height=max(440, legend_rows * 22 + 200),
+            showlegend=True,
+            legend=dict(
+                orientation="v",
+                x=1.02,
+                xanchor="left",
+                y=0.5,
+                yanchor="middle",
+                font=dict(size=11),
+            ),
+            margin=dict(t=60, b=40, l=20, r=160),
+        )
+    )
     return fig
 
 
