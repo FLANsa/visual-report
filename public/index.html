@@ -4,37 +4,76 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Visual Report</title>
-    <meta http-equiv="refresh" content="0; url=https://visual-report.streamlit.app/" />
-    <style>
-      body {
-        font-family: "Segoe UI", Tahoma, sans-serif;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
-        margin: 0;
-        background: #f7f9fc;
-        color: #1a1a1a;
-      }
-      .card {
-        text-align: center;
-        padding: 2rem;
-        background: #fff;
-        border-radius: 12px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-        max-width: 420px;
-      }
-      a {
-        color: #1f77b4;
-        font-weight: 600;
-      }
-    </style>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   </head>
   <body>
-    <div class="card">
-      <h1>Visual Report</h1>
-      <p>جاري تحويلك إلى لوحة التحكم…</p>
-      <p><a href="https://visual-report.streamlit.app/">اضغط هنا إذا لم يتم التحويل تلقائياً</a></p>
-    </div>
+    <main class="container">
+      <h1>📊 Visual Report</h1>
+      <p class="subtitle">
+        ارفع ملف Excel الخاص بتقرير القنوات وستظهر لك لوحة تحكم تفاعلية بأهم
+        المؤشرات والرسوم البيانية لأداء القنوات.
+      </p>
+
+      <section class="upload-card">
+        <label class="upload-label" for="excel-input">
+          📁 ارفع ملف Excel
+          <input id="excel-input" type="file" accept=".xlsx,.xls" />
+        </label>
+        <p id="file-name" class="file-name"></p>
+      </section>
+
+      <section id="welcome" class="info-card">
+        <p>👋 مرحباً! ارفع ملف Excel من الأعلى لعرض لوحة التحكم.</p>
+        <details>
+          <summary>📋 ما هو هيكل الملف المطلوب؟</summary>
+          <ul>
+            <li><strong>اسم الورقة:</strong> Channels Report</li>
+            <li>
+              <strong>الأعمدة:</strong> Date, Channel, Incoming, Closed, Pending,
+              Backlog, Average Response, Service Level
+            </li>
+            <li>
+              <strong>يدعم:</strong> الخلايا المدموجة في عمود التاريخ، وقيم Pending
+              المنقسمة على عمودين
+            </li>
+          </ul>
+        </details>
+      </section>
+
+      <section id="error-box" class="error-card hidden"></section>
+
+      <section id="dashboard" class="hidden">
+        <h2 id="report-date"></h2>
+        <div class="divider"></div>
+        <article class="kpi-card">
+          <h3>📦 إجمالي المتراكم</h3>
+          <p id="kpi-backlog" class="kpi-value">0</p>
+        </article>
+        <div class="divider"></div>
+        <h2>📈 الرسوم البيانية</h2>
+        <div class="grid-2">
+          <article class="chart-card">
+            <div id="chart-incoming" class="chart"></div>
+          </article>
+          <article class="chart-card">
+            <div id="chart-sla" class="chart"></div>
+          </article>
+        </div>
+        <div class="grid-2">
+          <article class="chart-card">
+            <div id="chart-response" class="chart"></div>
+          </article>
+          <article class="chart-card">
+            <div id="chart-pending" class="chart"></div>
+          </article>
+        </div>
+        <article class="chart-card">
+          <div id="chart-pie" class="chart"></div>
+        </article>
+      </section>
+    </main>
+    <script src="/app.js"></script>
   </body>
 </html>
